@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pandas
+import math
 import numpy  as np
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.linear_model import Ridge 
@@ -10,7 +11,6 @@ from sklearn.grid_search import GridSearchCV
 import tushare as ts
 import datetime as dt
 import pandas as pd
-from stock_tools import trade 
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
@@ -22,7 +22,35 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 ids = pd.read_csv('./id', sep='|', names=('id', 'name'),dtype={'time':'string', 'id':'string'})
+ids.index = ids.id
 ss = StandardScaler()
+
+## 获取分笔数据
+# get all time ticks
+def get_ticks(id, end, delta):
+    if isinstance(end, str):
+        end = dt.datetime.strptime(end_str, '%Y-%m-%d')
+    date_list = [end - dt.timedelta(days=x) for x in range(0, 100)]
+    ticks = None
+    for date in date_list:
+        date_str = dt.datetime.strftime(date, '%Y-%m-%d')
+        try:
+            tick = ts.get_tick_data(id, date_str)
+        except:
+            continue
+        if tick is None:
+            continue
+        tick['date'] = date_str
+        if ticks is None:
+            ticks = tick
+        else:
+            ticks = ticks.append(tick)
+        ticks['dt'] = ticks['date'] + ' '+ ticks['time']
+        ticks['id'] = id
+
+    return ticks
+
+
 
 
 # ## 将数据stack为series, 方便处理
@@ -30,7 +58,7 @@ ss = StandardScaler()
 
 def get_sd(id):
     try:
-        hist = ts.get_h_data(id, autype='qfq', start='2013-06-10')
+        hist = ts.get_h_data(id, autype='qfq', start='2005-06-10')
     except:
         return None
     s = hist.stack()
@@ -79,12 +107,11 @@ def get_feature(sd, label_date):
 
 def train(sd, end='2015-07-28'):
     end_dt = dt.datetime.strptime(end, '%Y-%m-%d')
-    date_list = [end_dt - dt.timedelta(days=x) for x in range(0, 600)]
+    date_list = [end_dt - dt.timedelta(days=x) for x in range(0, 2000)]
     rs = get_trainset(sd, date_list[0])
     if rs is None:
         return None
     rx, y = rs
-
     ry = [y]
     for d in date_list:
         rs = get_trainset(sd, d)
@@ -117,20 +144,22 @@ def predict(sd, rx, clf, date='2015-07-29'):
 f = open('pred.csv', 'w')
 for id in ids.id:
     print id
-    
-    sd = get_sd(id)
-    if sd is None:
-        continue
-    rs = train(sd)
-    if rs is  None:
-        continue
-    clf, score, rx = rs 
     try:
-        pred = predict(sd, rx, clf)
-    except:
+        sd = get_sd(id)
+        if sd is None:
+            continue
+        rs = train(sd)
+        if rs is  None:
+            continue
+        clf, score, rx = rs 
+        print score
+        rmse = math.sqrt(-score)
+        pred = predict(sd, rx, clf)[0]
+        f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
+        f.flush()
+    except     Exception,e:
+        print e
         continue
-    f.write('pred:%s score:%s'%(pred, score))
-    f.flush()
 f.close()
 
 
