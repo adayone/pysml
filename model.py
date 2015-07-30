@@ -13,6 +13,7 @@ import datetime as dt
 import pandas as pd
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler, normalize
@@ -27,10 +28,10 @@ ss = StandardScaler()
 
 ## 获取分笔数据
 # get all time ticks
-def get_ticks(id, end, delta):
+def get_tick_feature(id, end, delta):
     if isinstance(end, str):
         end = dt.datetime.strptime(end_str, '%Y-%m-%d')
-    date_list = [end - dt.timedelta(days=x) for x in range(0, 100)]
+    date_list = [end - dt.timedelta(days=x) for x in range(0, 90)]
     ticks = None
     for date in date_list:
         date_str = dt.datetime.strftime(date, '%Y-%m-%d')
@@ -41,6 +42,8 @@ def get_ticks(id, end, delta):
         if tick is None:
             continue
         tick['date'] = date_str
+        st = tick.sort('amount', ascending=False).head(10)
+        
         if ticks is None:
             ticks = tick
         else:
@@ -71,29 +74,37 @@ def get_sd(id):
 # ## 根据给定的label时间点， 返回fx, y
 
 
-def get_trainset(sd, label_dt):
+def get_trainset(sd, label_dt, delta = 7):
     label_date = dt.datetime.strftime(label_dt, '%Y-%m-%d')
+    end_date =  dt.datetime.strftime(label_dt + dt.timedelta(delta), '%Y-%m-%d')
     x = get_feature(sd, label_date)
     if x is None:
         return None
-    if label_dt.weekday() == 0:
-        if 'close_0' not in x or 'close_3' not in x:
+    if label_dt.weekday() == 5 or label_dt.weekday() == 6:
             return None
-        y = (x.close_0 - x.close_3)/x.close_3
-        fx = x.ix[:, 'open_3':]
-    else:
-        if 'close_0' not in x or 'close_1' not in x:
-            return None
-        y = (x.close_0 - x.close_1)/x.close_1
-        fx = x.ix[:, 'open_1':]
-    return fx, y
+    ssd = sd.set_index('date')
+    print end_date
+    print label_date
+    label_close = sd.query('date == "%s" and type == "close"'%(label_date)).value
+    if label_close is None or len(label_close) == 0:
+        return None
+    label_close = label_close.values[0]
+    print label_close
+    print type(label_close)
+    end_close = sd.query('date == "%s" and type == "close"'%(end_date)).value
+    if end_close is None or len(end_close) == 0:
+        return None
+    end_close = end_close.values[0]
+    y = (end_close - label_close)/label_close
+    print y
+    return x, y
 
 
 def get_feature(sd, label_date): 
     label_dt = dt.datetime.strptime(label_date, '%Y-%m-%d')
     if label_dt.weekday() == 5 or label_dt.weekday()==6:
         return None
-    start_dt = label_dt - dt.timedelta(180)
+    start_dt = label_dt - dt.timedelta(90)
     start_date = dt.datetime.strftime(start_dt, '%Y-%m-%d')
     trainset = sd.query('date <= "%s" and date >= "%s"'%(label_date, start_date))
     trainset['delta'] = label_dt - trainset.date
@@ -105,7 +116,7 @@ def get_feature(sd, label_date):
     return x
 
 
-def train(sd, end='2015-07-28'):
+def train(sd, end='2015-07-15'):
     end_dt = dt.datetime.strptime(end, '%Y-%m-%d')
     date_list = [end_dt - dt.timedelta(days=x) for x in range(0, 2000)]
     rs = get_trainset(sd, date_list[0])
@@ -124,13 +135,13 @@ def train(sd, end='2015-07-28'):
     train_x = np.asarray(rx)
     train_y = np.asarray(ry).ravel()
     train_scale_x = ss.fit_transform(train_x)
-    clf = Ridge(0.5)
+    clf = GradientBoostingRegressor()
     clf.fit(train_scale_x, train_y)
     scores = cross_val_score(clf, train_scale_x, train_y, scoring='mean_squared_error', cv=5)
     return clf, scores.mean(), rx
 
 
-def predict(sd, rx, clf, date='2015-07-29'):
+def predict(sd, rx, clf, date='2015-07-30'):
     fx = get_feature(sd, date)
     tmpx = rx.append(fx)
     cfx = tmpx.tail(1)
@@ -144,22 +155,21 @@ def predict(sd, rx, clf, date='2015-07-29'):
 f = open('pred.csv', 'w')
 for id in ids.id:
     print id
-    try:
-        sd = get_sd(id)
-        if sd is None:
-            continue
-        rs = train(sd)
-        if rs is  None:
-            continue
-        clf, score, rx = rs 
-        print score
-        rmse = math.sqrt(-score)
-        pred = predict(sd, rx, clf)[0]
-        f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
-        f.flush()
-    except     Exception,e:
-        print e
+#    try:
+    sd = get_sd(id)
+    if sd is None:
         continue
+    rs = train(sd)
+    if rs is  None:
+        continue
+    clf, score, rx = rs 
+    rmse = math.sqrt(-score)
+    pred = predict(sd, rx, clf)[0]
+    f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
+    f.flush()
+#    except     Exception,e:
+#        print e
+#        continue
 f.close()
 
 
