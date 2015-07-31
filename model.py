@@ -28,8 +28,8 @@ ss = StandardScaler()
 
 ## 获取分笔数据
 # get all time ticks
-def get_tick_feature(id, end, delta):
-    if isinstance(end, str):
+def get_tick_feature(id, end_str, delta):
+    if isinstance(end_str, str):
         end = dt.datetime.strptime(end_str, '%Y-%m-%d')
     date_list = [end - dt.timedelta(days=x) for x in range(0, 90)]
     ticks = None
@@ -41,30 +41,32 @@ def get_tick_feature(id, end, delta):
             continue
         if tick is None:
             continue
-        tick['date'] = date_str
-        st = tick.sort('amount', ascending=False).head(10)
-        
-        if ticks is None:
-            ticks = tick
-        else:
-            ticks = ticks.append(tick)
-        ticks['dt'] = ticks['date'] + ' '+ ticks['time']
-        ticks['id'] = id
+        ft = tick.sort('amount', ascending=False).head(10).reset_index().drop(['index', 'time'], 1).stack().reset_index()
+        ft['fea'] = ft.level_0.map(str) + '_' + ft.level_1
+        fea_pd = ft.drop(['level_0', 'level_1'], 1)
+        fea_pd.index = fea_pd.fea
+        fT = fea_pd.T
+        fT['date'] = date_str
 
+        if ticks is None:
+            ticks = fT
+        else:
+            ticks = ticks.append(fT)
     return ticks
 
-
-
-
 # ## 将数据stack为series, 方便处理
-
-
 def get_sd(id):
     try:
         hist = ts.get_h_data(id, autype='qfq', start='2005-06-10')
     except:
         return None
-    s = hist.stack()
+    fea_tick = get_tick_feature(id, '2015-06-10', 1500)
+    print 'fea', fea_tick.columns
+    print 'hist', hist.columns
+    hist.to_csv('hist.csv')
+    fea_tick.to_csv('tick.csv')
+    h = hist.merge(fea_tick, how='left', left_index=True, right_on='date')
+    s = h.stack()
     spd = pd.DataFrame(s)
     sd = spd.reset_index()
     sd.columns = ('date', 'type', 'value')
@@ -72,12 +74,10 @@ def get_sd(id):
 
 
 # ## 根据给定的label时间点， 返回fx, y
-
-
-def get_trainset(sd, label_dt, delta = 7):
+def get_trainset(id, sd, label_dt, delta = 7):
     label_date = dt.datetime.strftime(label_dt, '%Y-%m-%d')
     end_date =  dt.datetime.strftime(label_dt + dt.timedelta(delta), '%Y-%m-%d')
-    x = get_feature(sd, label_date)
+    x = get_feature(id, sd, label_date)
     if x is None:
         return None
     if label_dt.weekday() == 5 or label_dt.weekday() == 6:
@@ -100,7 +100,7 @@ def get_trainset(sd, label_dt, delta = 7):
     return x, y
 
 
-def get_feature(sd, label_date): 
+def get_feature(id, sd, label_date): 
     label_dt = dt.datetime.strptime(label_date, '%Y-%m-%d')
     if label_dt.weekday() == 5 or label_dt.weekday()==6:
         return None
@@ -113,19 +113,21 @@ def get_feature(sd, label_date):
     fea = trainset.loc[:, ['feature', 'value']]
     ifea = fea.set_index('feature')
     x = ifea.T
-    return x
+    
+    ft = get_tick_feature(id, label_date, 90)
+    return x.merge(ft, on='date')
 
 
-def train(sd, end='2015-07-15'):
+def train(id, sd, end='2015-07-15'):
     end_dt = dt.datetime.strptime(end, '%Y-%m-%d')
     date_list = [end_dt - dt.timedelta(days=x) for x in range(0, 2000)]
-    rs = get_trainset(sd, date_list[0])
+    rs = get_trainset(id, sd, date_list[0])
     if rs is None:
         return None
     rx, y = rs
     ry = [y]
     for d in date_list:
-        rs = get_trainset(sd, d)
+        rs = get_trainset(id, sd, d)
         if rs is None:
             continue    
         x, y = rs
@@ -155,21 +157,25 @@ def predict(sd, rx, clf, date='2015-07-30'):
 f = open('pred.csv', 'w')
 for id in ids.id:
     print id
-#    try:
-    sd = get_sd(id)
-    if sd is None:
+    try:
+        sd = get_sd(id)
+        if sd is None:
+            continue
+        rs = train(id, sd)
+        if rs is  None:
+            continue
+        clf, score, rx = rs 
+        rmse = math.sqrt(-score)
+        pred = predict(sd, rx, clf)[0]
+        f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
+        f.flush()
+    except     Exception,e:
+        print e
+        print '=== STEP ERROR INFO START'
+        import traceback
+        traceback.print_exc()
+        print '=== STEP ERROR INFO END'
         continue
-    rs = train(sd)
-    if rs is  None:
-        continue
-    clf, score, rx = rs 
-    rmse = math.sqrt(-score)
-    pred = predict(sd, rx, clf)[0]
-    f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
-    f.flush()
-#    except     Exception,e:
-#        print e
-#        continue
 f.close()
 
 
