@@ -50,7 +50,7 @@ for date in date_list:
         ticks = fT
     else:
         ticks = ticks.append(fT)
-    ticks.to_csv('ticks.csv', index=None)
+    ticks.to_csv('data/ticks.csv', index=None)
 
 # 获取历史数据矩阵
 # 将数据stack为series, 方便处理
@@ -61,21 +61,22 @@ except Exception, e:
     print e
 ls = hist.index.format()
 hist['date'] = [dt_tool.format(x) for x in ls]
-hist.to_csv('hist.csv', index=None)
+hist.to_csv('data/hist.csv', index=None)
 
 # 聚合两份数据
 h = hist.merge(ticks, how='left',  on='date')
-h.to_csv('merged.csv', index=None)
+h.to_csv('data/merged.csv', index=None)
 h.index = h.date
+h = h.drop('date', 1)
 s = h.stack()
 spd = pd.DataFrame(s)
 sd = spd.reset_index()
 sd.columns = ('date', 'type', 'value')
-sd.to_csv('fea.csv', index=None)
+sd.to_csv('data/sd.csv', index=None)
 
 # 开始构建训练数据
 # 根据给定的label时间点， 返回fx, y
-label_start_date = '2015-06-15'
+label_start_date = '2015-07-23'
 delta = 7
 label_end_date = dt_tool.add(label_start_date, delta)
 
@@ -83,12 +84,15 @@ label_end_date = dt_tool.add(label_start_date, delta)
 if dt_tool.is_weekend(label_start_date):
     sys/exit(-1)
 fea_start_date = dt_tool.add(label_start_date, -90)
-trainset = sd.query('date <= "%s" and date >= "%s"'%(label_start_date, fea_start_date))
-trainset['delta'] = trainset.date.apply(lambda x : dt_tool.delta_id(label_start_date, x))
+trainset = sd.query('date >= "%s" and date <= "%s"'%(fea_start_date, label_start_date))
+trainset['delta'] = trainset.date.apply(lambda x : dt_tool.delta_id(x, label_start_date))
 trainset['feature'] = trainset.type  + '_' + trainset.delta
+trainset.to_csv('data/trainset.csv', index=None)
 fea = trainset.loc[:, ['feature', 'value']]
+fea.to_csv('data/fea.csv', index=None)
 ifea = fea.set_index('feature')
 x = ifea.T
+x.to_csv('data/x.csv', index=None)
 
 
 
