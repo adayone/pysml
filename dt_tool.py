@@ -39,6 +39,11 @@ def delta_id(start, end):
 
 today = datetime.datetime.today()
 today_str = dt2str(today)
-delta = delta_id('2013-06-02', '2015-07-01')
+delta = delta_id('2015-06-30', '2015-07-01')
+print delta
+delta = delta_id('2015-06-28', '2015-07-01')
+print delta
 a = pd.DataFrame(['2015-06-02', '2015-07-01'])
 a.columns = ['dt']
+print  delta_id('2015-04-24', '2015-07-30')
+print  delta_id('2015-04-27', '2015-07-30')
