@@ -31,13 +31,14 @@ def type2id(x):
         return 0
     return -1
 
-def get_trainset(id, label_start_date, delta = 7, is_predict=False):
+def get_sd(id, label_start_date, fea_delta = 120):
     # delta 指的是 确定label；的时候 是一个星期的涨幅还是什么
+    # fea delta 指的是， 我要准备多久的数据
     ## 获取分笔数据
     # get all time ticks
     # 创建一个日期列表
     ticks = None
-    date_list = dt_tool.dt_range(label_start_date, delta)
+    date_list = dt_tool.dt_range(label_start_date, -fea_delta)
     for date in date_list:
         try:
             tick = ts.get_tick_data(id, date)
@@ -67,7 +68,10 @@ def get_trainset(id, label_start_date, delta = 7, is_predict=False):
     ls = hist.index.format()
     hist['date'] = [dt_tool.format(x) for x in ls]
     hist.to_csv('data/hist.csv', index=None)
-    
+
+    if hist is None or ticks is None:
+        return None
+   
     # 聚合两份数据
     h = hist.merge(ticks, how='left',  on='date')
     h.to_csv('data/merged.csv', index=None)
@@ -78,15 +82,19 @@ def get_trainset(id, label_start_date, delta = 7, is_predict=False):
     sd = spd.reset_index()
     sd.columns = ('date', 'type', 'value')
     sd.to_csv('data/sd.csv', index=None)
+    # 看了下 之前写的效率太低了 数据获取应该只有一遍的
+    return sd
     
+def get_trainset(sd, label_start_date, label_delta=7, is_predict=False):
     # 开始构建训练数据
     # 根据给定的label时间点， 返回fx, y
-    label_end_date = dt_tool.add(label_start_date, delta)
+    label_end_date = dt_tool.add(label_start_date, label_delta)
     
     # 将日期更换为delta
     if dt_tool.is_weekend(label_start_date):
         return None
-    fea_start_date = dt_tool.add(label_start_date, -90)
+    # 这个决定了获取多久的数据作为特征
+    fea_start_date = dt_tool.add(label_start_date, -900)
     trainset = sd.query('date >= "%s" and date <= "%s"'%(fea_start_date, label_start_date))
     trainset['delta'] = trainset.date.apply(lambda x : dt_tool.delta_id(x, label_start_date))
     trainset['feature'] = trainset.type  + '_' + trainset.delta
@@ -111,6 +119,7 @@ def get_trainset(id, label_start_date, delta = 7, is_predict=False):
         return None
     end_close = end_close.values[0]
     y = (end_close - label_close)/label_close
+    print y
     return x, y
 
 # 到此为止， 获取一条训练数据的操作已经结束了
@@ -119,15 +128,16 @@ def get_trainset(id, label_start_date, delta = 7, is_predict=False):
 
 ss = StandardScaler()
 label_start_date = '2015-07-15'
-delta = -15
-id = '000002'
-date_list = dt_tool.dt_range(label_start_date, delta)
-rs = get_trainset(id, date_list[0], delta)
+train_delta = -900
+id = '600588'
+sd = get_sd(id, label_start_date)
+date_list = dt_tool.dt_range(label_start_date, train_delta)
+rs = get_trainset(sd, date_list[0])
 rx, y = rs
 rx.to_csv('data/rx_1.csv', index=None)
 ry = [y]
 for d in date_list:
-    rs = get_trainset(id, d, delta)
+    rs = get_trainset(sd, d)
     if rs is None:
         continue    
     x, y = rs
@@ -142,14 +152,14 @@ np.savetxt('data/ry.csv', train_y)
 train_scale_x = ss.fit_transform(train_x)
 clf = GradientBoostingRegressor()
 clf.fit(train_scale_x, train_y)
-scores = cross_val_score(clf, train_scale_x, train_y, scoring='mean_squared_error', cv=5)
-print clf, scores.mean()
+scores = cross_val_score(clf, train_scale_x, train_y, scoring='mean_squared_error', cv=10)
+print clf, math.sqrt(-scores.mean())
 
 ## 做了这么多， 我们终于拿到了一个
 ## 骑士特征还算丰富的模型
 ## 欧巴， 我们开始预测吧， 希望不会又是然并卵
 ## 可不可以， rmse降到0.03以下
-fx = get_trainset(id, '2015-07-31', is_predict=True)
+fx = get_trainset(sd, '2015-07-31', is_predict=True)
 tmpx = rx.append(fx)
 cfx = tmpx.tail(1)
 cfx.fillna(0, inplace=True)
@@ -170,7 +180,6 @@ print pred
 #        if rs is  None:
 #            continue
 #        clf, score, rx = rs 
-#        rmse = math.sqrt(-score)
 #        pred = predict(sd, rx, clf)[0]
 #        f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
 #        f.flush()
