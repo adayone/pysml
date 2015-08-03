@@ -1,22 +1,18 @@
 # -*- coding: utf-8 -*-
-
+from sklearn.svm import SVR
 import pandas
 import sys
 import math
 import numpy  as np
+import tushare as ts
+import datetime as dt
+import pandas as pd
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.linear_model import Ridge 
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
-import tushare as ts
-import datetime as dt
-import pandas as pd
-from sklearn.linear_model import LogisticRegression as LR
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.svm import SVC
-from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.cross_validation import train_test_split,cross_val_score
 import dt_tool
@@ -114,29 +110,27 @@ def get_trainset(sd, label_start_date, label_delta=7, is_predict=False):
     if label_close is None or len(label_close) == 0:
         return None
     label_close = label_close.values[0]
-    end_close = sd.query('date == "%s" and type == "close"'%(label_end_date)).value
-    if end_close is None or len(end_close) == 0:
+    end_close = sd.query('date >= "%s" and date <= "%s" and type == "close"'%(label_start_date, label_end_date)).value.min()
+    if end_close is None:
         return None
-    end_close = end_close.values[0]
     y = (end_close - label_close)/label_close
     # 从数据保存的角度看， 分开保存还是太麻烦了
     # 直接存进去吧， 名字叫label
+    #y = end_close
     x['label'] = y
     return x
 
 # 到此为止， 获取一条训练数据的操作已经结束了
 # 在整个过程中， 随着目标时间的推移， 训练数据逐步增多
 # 那么， 让我们把上面的过程，包装成一个函数吧
-
+id = sys.argv[1]
 train_start_date = '2015-07-15'
 sd_start_date = '2015-08-01'
 pred_date = '2015-07-31'
 train_delta = -900
-id = '600588'
 sd = get_sd(id, sd_start_date)
 date_list = dt_tool.dt_range(train_start_date, train_delta)
 rxy = get_trainset(sd, date_list[0])
-print date_list[0]
 rxy.to_csv('data/rxy_1.csv', index=None)
 for d in date_list:
     rs = get_trainset(sd, d)
@@ -152,10 +146,12 @@ ss = StandardScaler()
 train_x = np.asarray(rxy.drop('label', 1))
 train_y = np.asarray(rxy.label).ravel()
 train_scale_x = ss.fit_transform(train_x)
-clf = GradientBoostingRegressor()
+#clf = GradientBoostingRegressor()
+#clf = SVR(kernel='poly', C=1e3, degree=2)
+#clf = LR(C=10.0, penalty='l1')
+clf = SVR(kernel='rbf', C=1e3, gamma=0.1)
 clf.fit(train_scale_x, train_y)
 scores = cross_val_score(clf, train_scale_x, train_y, scoring='mean_squared_error', cv=3)
-print clf, math.sqrt(-scores.mean())
 
 ## 做了这么多， 我们终于拿到了一个
 ## 骑士特征还算丰富的模型
@@ -171,31 +167,9 @@ cfx = pd.read_csv('data/pred_x.csv')
 pred_x = np.asarray(cfx)
 pred_scale_x = ss.fit_transform(pred_x)
 pred = clf.predict(pred_scale_x)
-print pred
+rmse = math.sqrt(-scores.mean())
+print  id, rmse, pred[0]
 
-
-#f = open('pred.csv', 'w')
-#for id in ids.id:
-#    print id
-#    try:
-#        sd = get_sd(id)
-#        if sd is None:
-#            continue
-#        rs = train(id, sd)
-#        if rs is  None:
-#            continue
-#        clf, score, rx = rs 
-#        pred = predict(sd, rx, clf)[0]
-#        f.write('%s, %s, %s, %s\n'%(id, ids.ix[id]['name'], pred, rmse))
-#        f.flush()
-#    except     Exception,e:
-#        print e
-#        print '=== STEP ERROR INFO START'
-#        import traceback
-#        traceback.print_exc()
-#        print '=== STEP ERROR INFO END'
-#        continue
-#f.close()
 
 
 
