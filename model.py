@@ -18,6 +18,7 @@ from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.cross_validation import train_test_split,cross_val_score
+import dt_tool
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -46,7 +47,7 @@ def get_tick_feature(id, end_str, delta):
         fea_pd = ft.drop(['level_0', 'level_1'], 1)
         fea_pd.index = fea_pd.fea
         fT = fea_pd.T
-        fT['date'] = date_str
+        fT['date'] = dt_tool.format(date_str)
 
         if ticks is None:
             ticks = fT
@@ -60,12 +61,15 @@ def get_sd(id):
         hist = ts.get_h_data(id, autype='qfq', start='2005-06-10')
     except:
         return None
+    ls = hist.index.format()
+    hist.index = [ dt_tool.format(x) for x in ls]
     fea_tick = get_tick_feature(id, '2015-06-10', 1500)
     print 'fea', fea_tick.columns
     print 'hist', hist.columns
     hist.to_csv('hist.csv')
     fea_tick.to_csv('tick.csv')
     h = hist.merge(fea_tick, how='left', left_index=True, right_on='date')
+    h.to_csv('merged.csv')
     s = h.stack()
     spd = pd.DataFrame(s)
     sd = spd.reset_index()
@@ -75,8 +79,8 @@ def get_sd(id):
 
 # ## 根据给定的label时间点， 返回fx, y
 def get_trainset(id, sd, label_dt, delta = 7):
-    label_date = dt.datetime.strftime(label_dt, '%Y-%m-%d')
-    end_date =  dt.datetime.strftime(label_dt + dt.timedelta(delta), '%Y-%m-%d')
+    label_date = dt_tool.dt2str(label_dt)
+    end_date = dt_tool.add(label_date, delta)
     x = get_feature(id, sd, label_date)
     if x is None:
         return None
@@ -101,14 +105,13 @@ def get_trainset(id, sd, label_dt, delta = 7):
 
 
 def get_feature(id, sd, label_date): 
-    label_dt = dt.datetime.strptime(label_date, '%Y-%m-%d')
+    label_dt = dt_tool.str2dt(label_date)
     if label_dt.weekday() == 5 or label_dt.weekday()==6:
         return None
-    start_dt = label_dt - dt.timedelta(90)
-    start_date = dt.datetime.strftime(start_dt, '%Y-%m-%d')
+    start_date = dt_tool(label_date, -90)
     trainset = sd.query('date <= "%s" and date >= "%s"'%(label_date, start_date))
     trainset['delta'] = label_dt - trainset.date
-    trainset['delta_str'] = trainset.delta.dt.days.map(str)
+    trainset['delta_str'] =  
     trainset['feature'] = trainset.type  + '_' + trainset.delta_str
     fea = trainset.loc[:, ['feature', 'value']]
     ifea = fea.set_index('feature')

@@ -13,10 +13,10 @@ def add(start_str, delta):
     return dt2str(end_dt)
 
 def dt_range(start_str, delta=90):
-    if delta > 0:
+    if int(delta) > 0:
         date_list = [add(start_str, x) for x in range(0, delta)]
     else:
-        date_list = [add(start_str, x) for x in range(-1, -delta)]
+        date_list = [add(start_str, -x) for x in range(0, -delta)]
     return date_list
 
 def format(dt_str):
@@ -40,10 +40,10 @@ def delta_id(start, end):
 today = datetime.datetime.today()
 today_str = dt2str(today)
 delta = delta_id('2015-06-30', '2015-07-01')
-print delta
 delta = delta_id('2015-06-28', '2015-07-01')
-print delta
 a = pd.DataFrame(['2015-06-02', '2015-07-01'])
 a.columns = ['dt']
-print  delta_id('2015-04-24', '2015-07-30')
-print  delta_id('2015-04-27', '2015-07-30')
+#print  delta_id('2015-04-24', '2015-07-30')
+#print  delta_id('2015-04-27', '2015-07-30')
+#print dt_range('2015-07-15',-7)
+#print dt_range('2015-07-15', -15)
