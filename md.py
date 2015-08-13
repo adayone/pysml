@@ -19,7 +19,7 @@ matplotlib.style.use('ggplot')
 
 # get all time ticks
 def get_ticks(id, end, delta):
-    date_list = dt_tool.dt_range(end, -delta)
+    date_list = dt_tool.dt_range(end, delta)
     ticks = None
     for date_str in date_list:
         try:
@@ -61,28 +61,29 @@ def tick_plot(ticks):
     return fig.get_figure()
 
 def hist_plot(id, end, delta):
-    start_date = dt_tool.add(end, -delta)
+    start_date = dt_tool.add(end, delta)
     df = ts.get_h_data(id, autype='qfq', start=start_date)
-    print df
     df['m1'] = pd.rolling_mean(df['close'], window=15, min_periods=1, center=True)
-    df['m2'] = pd.rolling_mean(df['close'], window=30, min_periods=1, center=True)
     df['m4'] = pd.rolling_mean(df['close'], window=45, min_periods=1, center=True)
-    fig = df.plot(y=['close', 'm1', 'm2', 'm4', 'volume'], title=id,  secondary_y='volume', grid=True, legend=True, figsize=(16, 10))
+    fig = df.plot(y=['close', 'm1',  'm4', 'volume'], title=id,  secondary_y='volume', grid=True, legend=True, figsize=(16, 10))
     return fig.get_figure()
     
 id = sys.argv[1]
 delta = int(sys.argv[2])
 print id
 today = dt_tool.get_today()
-ticks = get_ticks(id, today, delta)
+ticks = get_ticks(id, today, -delta)
 name, now, begin, rat = trade.get_realtime(id)
-#fig = tick_plot(ticks)
-#fig.savefig('image/%s_tick_%s.png'%(id, today), dpi=400)
-#fig = hist_plot(id, today, delta)
-#fig.savefig('image/%s_hist_%s.png'%(id, today), dpi=400)
+fig = tick_plot(ticks)
+fig.savefig('image/%s_tick_%s.png'%(id, today), dpi=400)
+fig = hist_plot(id, today, -delta)
+fig.savefig('image/%s_hist_%s.png'%(id, today), dpi=400)
 sticks = ticks.sort('amount', ascending=False).head(5)
 sticks.type = sticks.type.apply(lambda x : type2id(x))
 sticks.to_csv('data/%s_%s.csv'%(id, today), sep='|', index=None)
+#ticks_today = ts.get_today_ticks(id).sort('amount', ascending=False).head(10)
+ticks_today = ts.get_tick_data(id, today).sort('amount', ascending=False).head(10)
+ticks_today.type = ticks_today.type.apply(lambda x : type2id(x))
 # write
 rs = '# %s:%s\n'%(id,name)
 rs += '## tick image\n'
@@ -94,6 +95,13 @@ txt = sticks.drop(['dt', 'id'], 1)
 txt = txt.reset_index().drop(['index'], 1)
 tab = tabulate(txt, headers='keys', tablefmt='pipe')
 rs += tab.encode('utf-8')
+rs += '\n\n## today\n'
+rs += '* begin : %s \n * now : %s\n'%(begin, now)
+rs += '\n\n## today ticks\n\n'
+txt = ticks_today.reset_index().drop(['index'], 1)
+tab = tabulate(txt, headers='keys', tablefmt='pipe')
+rs += tab.encode('utf-8')
+
 f = open('text/%s_%s.md'%(id, today), 'w')
 f.write(rs)
 f.close()
