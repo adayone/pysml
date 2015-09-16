@@ -57,53 +57,57 @@ def cmp_top(ticks):
 def tick_plot(ticks): 
     # init
     ticks = ticks.sort('dt', ascending=True)
-    fig = ticks.plot(x='dt', y=['price', 'amount'],  secondary_y='amount',  legend=True, title=id, rot=30, figsize=(16,6)) 
+    fig = ticks.plot(x='dt', y=['price', 'amount'],  secondary_y='amount',  legend=True, title=id, rot=10, figsize=(18,8)) 
     return fig.get_figure()
 
 def hist_plot(id, end, delta):
     start_date = dt_tool.add(end, delta)
     df = ts.get_h_data(id, autype='qfq', start=start_date)
-    df['m1'] = pd.rolling_mean(df['close'], window=15, min_periods=1, center=True)
-    df['m4'] = pd.rolling_mean(df['close'], window=45, min_periods=1, center=True)
-    fig = df.plot(y=['close', 'm1',  'm4', 'volume'], title=id,  secondary_y='volume', grid=True, legend=True, figsize=(16, 10))
+    df['r13'] = pd.rolling_mean(df['close'], window=13, min_periods=1, center=True)
+    df['r34'] = pd.rolling_mean(df['close'], window=34, min_periods=1, center=True)
+    df['r55'] = pd.rolling_mean(df['close'], window=55, min_periods=1, center=True)
+    fig = df.plot(y=['close', 'r13',  'r34', 'r55', 'volume'], title=id,  secondary_y='volume', grid=True, legend=True, figsize=(18, 8))
     return fig.get_figure()
     
 id = sys.argv[1]
 delta = int(sys.argv[2])
 print id
+base = '/Users/haoyuanhu/Write/notes'
 today = dt_tool.get_today()
 ticks = get_ticks(id, today, -delta)
 name, now, begin, rat = trade.get_realtime(id)
 fig = tick_plot(ticks)
-fig.savefig('image/%s_tick_%s.png'%(id, today), dpi=400)
+fig.savefig('%s/image/%s_tick_%s.png'%(base, id, today), dpi=400)
 fig = hist_plot(id, today, -delta)
-fig.savefig('image/%s_hist_%s.png'%(id, today), dpi=400)
+fig.savefig('%s/image/%s_hist_%s.png'%(base, id, today), dpi=400)
 sticks = ticks.sort('amount', ascending=False).head(5)
 sticks.type = sticks.type.apply(lambda x : type2id(x))
-sticks.to_csv('data/%s_%s.csv'%(id, today), sep='|', index=None)
+sticks.to_csv('%s/data/%s_%s.csv'%(base, id, today),  index=None)
+
+# tick today
+yestoday = dt_tool.add(today, -3)
 #ticks_today = ts.get_today_ticks(id).sort('amount', ascending=False).head(10)
-ticks_today = ts.get_tick_data(id, today).sort('amount', ascending=False).head(10)
+#ticks_today = ts.get_tick_data(id, today).sort('amount', ascending=False).head(5)
+ticks_today = ts.get_tick_data(id, yestoday).sort('amount', ascending=False).head(5)
 ticks_today.type = ticks_today.type.apply(lambda x : type2id(x))
-# write
-rs = '# %s:%s\n'%(id,name)
-rs += '## tick image\n'
-rs += '![](../image/%s_tick_%s.png)\n'%(id, today)
-rs += '## hist image\n'
-rs += '![](../image/%s_hist_%s.png)\n'%(id, today)
-rs += '## tick data\n'
+txt = ticks_today.reset_index().drop(['index'], 1)
+tab = tabulate(txt, headers='keys', tablefmt='pipe')
+tick_today = tab.encode('utf-8')
+
+# hist tick
 txt = sticks.drop(['dt', 'id'], 1)
 txt = txt.reset_index().drop(['index'], 1)
 tab = tabulate(txt, headers='keys', tablefmt='pipe')
-rs += tab.encode('utf-8')
-rs += '\n\n## today\n'
-rs += '* begin : %s \n * now : %s\n'%(begin, now)
-rs += '\n\n## today ticks\n\n'
-txt = ticks_today.reset_index().drop(['index'], 1)
-tab = tabulate(txt, headers='keys', tablefmt='pipe')
-rs += tab.encode('utf-8')
+tick_hist = tab.encode('utf-8')
+top_tick_day = txt.ix[0].date
+top_tick_type = txt.ix[0].type
 
-f = open('text/%s_%s.md'%(id, today), 'w')
-f.write(rs)
+# write
+params = {"rate":'%s%%'%(100 *rat), "id":id, "name":name, "today":today, "tick_hist":tick_hist, "tick_today":tick_today, 'begin':begin, 'now':now, 'top_tick_day':top_tick_day, "top_tick_type":top_tick_type}
+
+fr = open('tp.md', 'r').read()%params
+f = open('%s/stock/%s_%s.md'%(base,  id, today), 'w')
+f.write(fr)
 f.close()
 
 

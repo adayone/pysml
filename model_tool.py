@@ -22,10 +22,10 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 def type2id(x):
     if x == '买盘':
-        return 1
+        return 'buy'
     elif x == '中性盘':
-        return 0
-    return -1
+        return 'middle'
+    return 'sell'
 
 def get_sd(id, label_start_date, fea_delta = 240):
     # delta 指的是 确定label；的时候 是一个星期的涨幅还是什么

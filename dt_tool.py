@@ -37,6 +37,11 @@ def delta_day(start, end):
 def delta_id(start, end):
     return '%d_%s'%(delta_day(start, end)/7, str2dt(start).weekday())
 
+def get_today():
+    today = datetime.datetime.today()
+    today_str = dt2str(today)
+    return today_str
+
 today = datetime.datetime.today()
 today_str = dt2str(today)
 delta = delta_id('2015-06-30', '2015-07-01')
